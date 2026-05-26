@@ -4,74 +4,129 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000"
-    tools:context=".MainActivity">
+    android:background="#000000">
 
     <TextureView
         android:id="@+id/textureView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/vignette_gradient" />
+
+    <!-- Status Overlay -->
+    <LinearLayout
+        android:id="@+id/statusOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:background="@drawable/bg_pill"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ProgressBar
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center"
+            android:indeterminateTint="#FF4444" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Stacking: 0/10"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Bottom Controls -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@drawable/bg_controls"
         android:orientation="vertical"
-        android:padding="16dp"
-        android:background="#80000000"
+        android:padding="24dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
         <TextView
             android:id="@+id/tvExposure"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:text="Exposure Time: Auto" />
+            android:text="Exposure: 100ms"
+            android:textColor="#BBBBBB"
+            android:textSize="12sp"
+            android:textAllCaps="true"
+            android:letterSpacing="0.1" />
+
         <SeekBar
             android:id="@+id/sbExposure"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginTop="8dp"
+            android:progressDrawable="@drawable/custom_seekbar"
+            android:thumb="@drawable/custom_thumb" />
 
         <TextView
             android:id="@+id/tvStackCount"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:text="Stack Count: 10" />
+            android:layout_marginTop="16dp"
+            android:text="Stack Count: 25"
+            android:textColor="#BBBBBB"
+            android:textSize="12sp"
+            android:textAllCaps="true"
+            android:letterSpacing="0.1" />
+
         <SeekBar
             android:id="@+id/sbStackCount"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:max="99"
-            android:progress="9"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginTop="8dp"
+            android:max="100"
+            android:progress="25"
+            android:progressDrawable="@drawable/custom_seekbar"
+            android:thumb="@drawable/custom_thumb" />
 
-        <Switch
-            android:id="@+id/swSaveDng"
+        <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:text="Save as DNG (Off = JPEG)"
-            android:layout_marginBottom="16dp" />
+            android:layout_height="100dp"
+            android:layout_marginTop="24dp">
 
-        <Button
-            android:id="@+id/btnCapture"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="CAPTURE"
-            android:backgroundTint="#FF0000"
-            android:textColor="#FFFFFF" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCapture"
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:layout_centerInParent="true"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:cornerRadius="40dp"
+                app:icon="@drawable/ic_shutter"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconSize="48dp"
+                android:backgroundTint="#FF4444"
+                app:rippleColor="#FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/btnSettings"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_settings"
+                app:tint="#FFFFFF" />
+
+        </RelativeLayout>
 
     </LinearLayout>
-
-    <ProgressBar
-        android:id="@+id/progressBar"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

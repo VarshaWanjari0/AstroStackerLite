@@ -7,15 +7,9 @@ import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
-import android.hardware.camera2.params.OutputConfiguration
-import android.hardware.camera2.params.SessionConfiguration
 import android.media.Image
 import android.media.ImageReader
-import android.os.Bundle
-import android.os.Handler
-import android.os.HandlerThread
-import android.util.Log
-import android.util.Range
+import android.os.*
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
@@ -26,7 +20,6 @@ import com.astrostacker.lite.databinding.ActivityMainBinding
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
-import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,16 +33,19 @@ class MainActivity : AppCompatActivity() {
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
 
+    // Stacking Thread for heavy math
+    private var stackingThread: HandlerThread? = null
+    private var stackingHandler: Handler? = null
+
     private var exposureRange: Range<Long>? = null
-    private var currentExposure: Long = 100000000L // 100ms default
-    private var stackCount: Int = 10
+    private var currentExposure: Long = 100000000L // 100ms
+    private var stackCount: Int = 25
     
     private var isCapturing = false
     private var currentCaptureCount = 0
-    private var masterCanvas: IntArray? = null
+    private var masterCanvas: LongArray? = null // Use Long to prevent overflow during summing
     private var canvasWidth = 0
     private var canvasHeight = 0
-    private var dngCreator: DngCreator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,7 +53,10 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        setupUI()
+    }
 
+    private fun setupUI() {
         binding.textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
                 openCamera()
@@ -73,11 +72,10 @@ class MainActivity : AppCompatActivity() {
                     val min = it.lower.toDouble()
                     val max = it.upper.toDouble()
                     val p = progress / 100.0
-                    // Logarithmic scale for better control over small values
                     val value = Math.exp(Math.log(min) + p * (Math.log(max) - Math.log(min))).toLong()
                     currentExposure = value
-                    binding.tvExposure.text = "Exposure Time: ${value / 1000000} ms"
-                    updatePreview()
+                    binding.tvExposure.text = "Exposure: ${value / 1000000}ms"
+                    if (!isCapturing) updatePreview()
                 }
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -86,7 +84,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.sbStackCount.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                stackCount = progress + 1
+                stackCount = progress.coerceAtLeast(1)
                 binding.tvStackCount.text = "Stack Count: $stackCount"
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -94,40 +92,35 @@ class MainActivity : AppCompatActivity() {
         })
 
         binding.btnCapture.setOnClickListener {
-            if (!isCapturing) {
-                startCaptureBurst()
-            }
+            if (!isCapturing) startCaptureBurst()
         }
     }
 
     override fun onResume() {
         super.onResume()
-        startBackgroundThread()
-        if (binding.textureView.isAvailable) {
-            openCamera()
-        }
+        startThreads()
+        if (binding.textureView.isAvailable) openCamera()
     }
 
     override fun onPause() {
         closeCamera()
-        stopBackgroundThread()
+        stopThreads()
         super.onPause()
     }
 
-    private fun startBackgroundThread() {
+    private fun startThreads() {
         backgroundThread = HandlerThread("CameraBackground").also { it.start() }
         backgroundHandler = Handler(backgroundThread!!.looper)
+        
+        stackingThread = HandlerThread("StackingEngine").also { it.start() }
+        stackingHandler = Handler(stackingThread!!.looper)
     }
 
-    private fun stopBackgroundThread() {
+    private fun stopThreads() {
         backgroundThread?.quitSafely()
-        try {
-            backgroundThread?.join()
-            backgroundThread = null
-            backgroundHandler = null
-        } catch (e: InterruptedException) {
-            e.printStackTrace()
-        }
+        stackingThread?.quitSafely()
+        backgroundThread = null
+        stackingThread = null
     }
 
     @SuppressLint("MissingPermission")
@@ -141,28 +134,27 @@ class MainActivity : AppCompatActivity() {
             for (id in cameraManager.cameraIdList) {
                 val chars = cameraManager.getCameraCharacteristics(id)
                 val facing = chars.get(CameraCharacteristics.LENS_FACING)
-                val capabilities = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+                val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
                 
                 if (facing == CameraCharacteristics.LENS_FACING_BACK &&
-                    capabilities?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) == true) {
+                    caps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) == true) {
                     
                     cameraId = id
                     exposureRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
                     val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-                    val rawSizes = map?.getOutputSizes(ImageFormat.RAW_SENSOR)
+                    val rawSize = map?.getOutputSizes(ImageFormat.RAW_SENSOR)?.firstOrNull()
                     
-                    if (!rawSizes.isNullOrEmpty()) {
-                        val largest = rawSizes[0] // Assuming largest is first
-                        canvasWidth = largest.width
-                        canvasHeight = largest.height
-                        setupImageReader(largest.width, largest.height)
+                    if (rawSize != null) {
+                        canvasWidth = rawSize.width
+                        canvasHeight = rawSize.height
+                        setupImageReader(rawSize.width, rawSize.height)
                         cameraManager.openCamera(id, stateCallback, backgroundHandler)
                         return
                     }
                 }
             }
-            Toast.makeText(this, "RAW capability not found", Toast.LENGTH_LONG).show()
-        } catch (e: CameraAccessException) {
+            Toast.makeText(this, "Hardware Not Supported", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
             e.printStackTrace()
         }
     }
@@ -170,212 +162,137 @@ class MainActivity : AppCompatActivity() {
     private val stateCallback = object : CameraDevice.StateCallback() {
         override fun onOpened(camera: CameraDevice) {
             cameraDevice = camera
-            createCameraPreviewSession()
+            createPreviewSession()
         }
         override fun onDisconnected(camera: CameraDevice) {
             cameraDevice?.close()
-            cameraDevice = null
         }
         override fun onError(camera: CameraDevice, error: Int) {
             cameraDevice?.close()
-            cameraDevice = null
         }
     }
 
-    private fun setupImageReader(width: Int, height: Int) {
-        // Max images = 2 to allow fast processing and recycling without OOM
-        imageReader = ImageReader.newInstance(width, height, ImageFormat.RAW_SENSOR, 2).apply {
+    private fun setupImageReader(w: Int, h: Int) {
+        imageReader = ImageReader.newInstance(w, h, ImageFormat.RAW_SENSOR, 5).apply {
             setOnImageAvailableListener({ reader ->
-                val image = reader.acquireLatestImage()
-                image?.let { processRawImage(it) }
+                val img = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
+                if (isCapturing) {
+                    // Offload math to stacking thread immediately
+                    stackingHandler?.post { processFrame(img) }
+                } else {
+                    img.close()
+                }
             }, backgroundHandler)
         }
     }
 
-    private fun createCameraPreviewSession() {
-        try {
-            val texture = binding.textureView.surfaceTexture!!
-            texture.setDefaultBufferSize(binding.textureView.width, binding.textureView.height)
-            val previewSurface = Surface(texture)
-
-            val surfaces = listOf(previewSurface, imageReader!!.surface)
-
-            cameraDevice?.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
-                override fun onConfigured(session: CameraCaptureSession) {
-                    captureSession = session
-                    updatePreview()
-                }
-                override fun onConfigureFailed(session: CameraCaptureSession) {}
-            }, null)
-
-        } catch (e: CameraAccessException) {
-            e.printStackTrace()
-        }
+    private fun createPreviewSession() {
+        val surface = Surface(binding.textureView.surfaceTexture)
+        cameraDevice?.createCaptureSession(listOf(surface, imageReader?.surface), object : CameraCaptureSession.StateCallback() {
+            override fun onConfigured(session: CameraCaptureSession) {
+                captureSession = session
+                updatePreview()
+            }
+            override fun onConfigureFailed(s: CameraCaptureSession) {}
+        }, backgroundHandler)
     }
 
     private fun updatePreview() {
-        captureSession?.let { session ->
-            val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            builder?.addTarget(Surface(binding.textureView.surfaceTexture))
-            
-            // Lock focus to infinity
-            builder?.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder?.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f)
-            
-            // Set exposure
-            builder?.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            builder?.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-            builder?.set(CaptureRequest.SENSOR_SENSITIVITY, 800) // Fixed ISO for stacking
+        val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW) ?: return
+        builder.addTarget(Surface(binding.textureView.surfaceTexture))
+        
+        // Astro Locks
+        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+        builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f) // Infinity
+        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+        builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
+        builder.set(CaptureRequest.SENSOR_SENSITIVITY, 1600) // High ISO for preview
 
-            session.setRepeatingRequest(builder!!.build(), null, backgroundHandler)
-        }
+        captureSession?.setRepeatingRequest(builder.build(), null, backgroundHandler)
     }
 
     private fun startCaptureBurst() {
-        if (cameraDevice == null || captureSession == null) return
-        
         isCapturing = true
         currentCaptureCount = 0
-        masterCanvas = IntArray(canvasWidth * canvasHeight)
+        masterCanvas = LongArray(canvasWidth * canvasHeight)
         
         runOnUiThread {
+            binding.statusOverlay.visibility = View.VISIBLE
             binding.btnCapture.isEnabled = false
-            binding.progressBar.visibility = View.VISIBLE
+            binding.tvStatus.text = "Stacking: 0/$stackCount"
         }
 
-        try {
-            val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-            builder?.addTarget(imageReader!!.surface)
-            
-            builder?.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder?.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f)
-            builder?.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            builder?.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-            builder?.set(CaptureRequest.SENSOR_SENSITIVITY, 800)
-            
-            val characteristics = cameraManager.getCameraCharacteristics(cameraId!!)
-            dngCreator = DngCreator(characteristics, builder!!.build())
+        val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE) ?: return
+        builder.addTarget(imageReader!!.surface)
+        builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
+        builder.set(CaptureRequest.SENSOR_SENSITIVITY, 800)
+        builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f)
 
-            val requests = mutableListOf<CaptureRequest>()
-            for (i in 0 until stackCount) {
-                requests.add(builder.build())
-            }
-
-            captureSession?.captureBurst(requests, captureCallback, backgroundHandler)
-
-        } catch (e: CameraAccessException) {
-            e.printStackTrace()
-            resetCaptureState()
-        }
+        val requests = List(stackCount) { builder.build() }
+        captureSession?.captureBurst(requests, null, backgroundHandler)
     }
 
-    private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
-        override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
-            // Handled in ImageReader
-        }
-    }
-
-    private fun processRawImage(image: Image) {
+    private fun processFrame(image: Image) {
         val plane = image.planes[0]
         val buffer = plane.buffer
-        val pixelStride = plane.pixelStride
         val rowStride = plane.rowStride
-
-        // Simple running sum in RAM
+        val pixelStride = plane.pixelStride
         val canvas = masterCanvas ?: return
-        
-        // Ensure buffer is read as shorts (16-bit)
+
         val shortBuffer = buffer.asShortBuffer()
-        
-        var canvasIndex = 0
+        var cIdx = 0
         for (y in 0 until canvasHeight) {
-            var bufIndex = (y * rowStride) / 2 // in shorts
+            var bIdx = (y * rowStride) / 2
             for (x in 0 until canvasWidth) {
-                // Read unsigned short (16-bit) and add to accumulator
-                val pixel = shortBuffer.get(bufIndex).toInt() and 0xFFFF
-                canvas[canvasIndex] += pixel
-                canvasIndex++
-                bufIndex += pixelStride / 2
+                canvas[cIdx] += (shortBuffer.get(bIdx).toInt() and 0xFFFF).toLong()
+                cIdx++
+                bIdx += pixelStride / 2
             }
         }
-        
         image.close()
         
         currentCaptureCount++
         runOnUiThread {
-            binding.btnCapture.text = "CAPTURING $currentCaptureCount/$stackCount"
+            binding.tvStatus.text = "Stacking: $currentCaptureCount/$stackCount"
         }
 
-        if (currentCaptureCount >= stackCount) {
-            saveStackedImage()
-        }
+        if (currentCaptureCount >= stackCount) finalizeStack()
     }
 
-    private fun saveStackedImage() {
-        runOnUiThread { binding.btnCapture.text = "PROCESSING..." }
-
+    private fun finalizeStack() {
         val canvas = masterCanvas ?: return
         val finalBuffer = ByteBuffer.allocateDirect(canvasWidth * canvasHeight * 2)
         
-        // Calculate average and convert back to 16-bit RAW
         for (i in canvas.indices) {
             val avg = (canvas[i] / stackCount).coerceIn(0, 65535).toShort()
             finalBuffer.putShort(avg)
         }
         finalBuffer.rewind()
 
-        // Write out file (DNG/JPEG based on switch)
-        // Since zero bloat, we use pure Android APIs
         try {
-            val dir = File(getExternalFilesDir(null), "AstroStacker")
-            if (!dir.exists()) dir.mkdirs()
+            val folder = File(getExternalFilesDir(null), "AstroStacker")
+            if (!folder.exists()) folder.mkdirs()
+            val file = File(folder, "STACK_${System.currentTimeMillis()}.raw")
             
-            val isDng = binding.swSaveDng.isChecked
-            val filename = "Astro_${System.currentTimeMillis()}.${if(isDng) "dng" else "jpg"}"
-            val file = File(dir, filename)
-            
-            if (isDng && dngCreator != null) {
-                // To save as DNG using DngCreator we'd need an Image object.
-                // Since we averaged it manually, writing DNG from scratch is complex.
-                // Alternatively, we save RAW dump
-                FileOutputStream(file).use { out ->
-                    out.channel.write(finalBuffer)
-                }
-                runOnUiThread { Toast.makeText(this, "Saved RAW bin to ${file.absolutePath}", Toast.LENGTH_LONG).show() }
-            } else {
-                // Convert RAW Bayer to RGB is complex natively without RenderScript.
-                // For "zero bloat" we just dump raw bytes here, or use a basic demosaic.
-                // Realistically, for an ultra-lite app, we save the RAW short array to disk.
-                FileOutputStream(file).use { out ->
-                    out.channel.write(finalBuffer)
-                }
-                runOnUiThread { Toast.makeText(this, "Saved raw bin to ${file.absolutePath}", Toast.LENGTH_LONG).show() }
+            FileOutputStream(file).use { it.channel.write(finalBuffer) }
+            runOnUiThread { 
+                Toast.makeText(this, "Saved to ${file.name}", Toast.LENGTH_SHORT).show()
+                resetUI()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        resetCaptureState()
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
-    private fun resetCaptureState() {
+    private fun resetUI() {
         isCapturing = false
         masterCanvas = null
-        dngCreator?.close()
-        dngCreator = null
-        runOnUiThread {
-            binding.btnCapture.isEnabled = true
-            binding.btnCapture.text = "CAPTURE"
-            binding.progressBar.visibility = View.GONE
-        }
+        binding.statusOverlay.visibility = View.GONE
+        binding.btnCapture.isEnabled = true
+        updatePreview()
     }
 
     private fun closeCamera() {
         captureSession?.close()
-        captureSession = null
         cameraDevice?.close()
-        cameraDevice = null
         imageReader?.close()
-        imageReader = null
     }
 }
