@@ -49,6 +49,7 @@ class CameraEngine(
     var currentFocusDistance = 0.0f
     var isTorchOn = false
     var isCapturing = false
+    var isAutoPreviewEnabled = true // Fixes camera lag during preview
 
     fun start() {
         startBackgroundThread()
@@ -151,7 +152,7 @@ class CameraEngine(
         try {
             val builder = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             builder.addTarget(Surface(binding.textureView.surfaceTexture!!))
-            applySettings(builder)
+            applySettings(builder, isPreview = true)
             captureSession!!.setRepeatingRequest(builder.build(), null, backgroundHandler)
         } catch (e: Exception) { Log.e(TAG, "updatePreview error", e) }
     }
@@ -164,9 +165,8 @@ class CameraEngine(
 
             val builder = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
             builder.addTarget(imageReader!!.surface!!)
-            applySettings(builder)
+            applySettings(builder, isPreview = false)
 
-            // Repeating request is often safer for low-end devices than captureBurst to prevent buffer overflow
             val requests = List(stackingEngine.targetStackCount) { builder.build() }
             
             captureSession!!.captureBurst(requests, object : CameraCaptureSession.CaptureCallback() {
@@ -175,7 +175,6 @@ class CameraEngine(
                 }
                 
                 override fun onCaptureSequenceCompleted(session: CameraCaptureSession, sequenceId: Int, frameNumber: Long) {
-                    // Sequence done. Even if we dropped frames, tell stacking engine to finalize whatever it has.
                     stackingEngine.onSequenceCompleted()
                     isCapturing = false
                 }
@@ -193,15 +192,21 @@ class CameraEngine(
         }
     }
 
-    private fun applySettings(builder: CaptureRequest.Builder) {
+    private fun applySettings(builder: CaptureRequest.Builder, isPreview: Boolean) {
         builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
         builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocusDistance)
         builder.set(CaptureRequest.FLASH_MODE, if (isTorchOn) CaptureRequest.FLASH_MODE_TORCH else CaptureRequest.FLASH_MODE_OFF)
 
         if (isManualSupported) {
-            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-            builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
+            // FIX: If it's a preview and Auto Preview is ON, let the camera AE run so the preview isn't lagging.
+            if (isPreview && isAutoPreviewEnabled) {
+                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            } else {
+                // Actual capture, or user disabled Auto Preview: lock manual settings
+                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
+                builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
+            }
         }
 
         sensorRect?.let {
@@ -218,7 +223,6 @@ class CameraEngine(
         imageReader?.close(); imageReader = null
     }
 
-    // Helpers for logarithmic sliders
     fun setExposureProgress(progress: Int) {
         exposureRange?.let {
             val min = it.lower.toDouble().coerceAtLeast(1000.0)

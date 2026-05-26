@@ -81,6 +81,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Feature Toggles
+        binding.swAutoPreview.setOnCheckedChangeListener { _, isChecked ->
+            cameraEngine.isAutoPreviewEnabled = isChecked
+            cameraEngine.updatePreview()
+        }
+
+        binding.swHotPixel.setOnCheckedChangeListener { _, isChecked ->
+            stackingEngine.isHotPixelRemovalEnabled = isChecked
+        }
+
         // Dev Options - Brightness Boost
         binding.sbDevBrightness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -164,7 +174,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startCountdown() {
-        binding.mainUiLayout.visibility = View.GONE
+        binding.btnCapture.visibility = View.GONE
+        binding.btnDevOptions.visibility = View.GONE
         binding.tvTimer.visibility = View.VISIBLE
         binding.processingOverlay.visibility = View.GONE
         

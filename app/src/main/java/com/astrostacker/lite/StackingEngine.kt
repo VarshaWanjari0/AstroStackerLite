@@ -30,6 +30,7 @@ class StackingEngine(
     var targetStackCount = 25
     var brightnessMultiplier = 1.0f
     var isDngMode = true
+    var isHotPixelRemovalEnabled = true
 
     private var canvasWidth = 0
     private var canvasHeight = 0
@@ -61,7 +62,7 @@ class StackingEngine(
 
         activity.runOnUiThread {
             binding.processingOverlay.visibility = View.VISIBLE
-            binding.tvProgress.text = "Stacking: 0/$targetStackCount"
+            binding.tvProgress.text = "Capturing: 0/$targetStackCount"
         }
     }
 
@@ -71,7 +72,6 @@ class StackingEngine(
         }
     }
 
-    // Called by CameraEngine when the burst sequence is done, regardless of drops
     fun onSequenceCompleted() {
         if (!isSaving && framesProcessed > 0) {
             isCapturing = false
@@ -79,7 +79,7 @@ class StackingEngine(
         } else if (framesProcessed == 0) {
             isCapturing = false
             resetUI()
-            activity.runOnUiThread { Toast.makeText(activity, "No frames captured. Try again.", Toast.LENGTH_SHORT).show() }
+            activity.runOnUiThread { Toast.makeText(activity, "No frames captured.", Toast.LENGTH_SHORT).show() }
         }
     }
 
@@ -106,7 +106,7 @@ class StackingEngine(
             }
 
             framesProcessed++
-            activity.runOnUiThread { binding.tvProgress.text = "Stacking: $framesProcessed/$targetStackCount" }
+            activity.runOnUiThread { binding.tvProgress.text = "Capturing: $framesProcessed/$targetStackCount" }
             
             if (framesProcessed >= targetStackCount && !isSaving) {
                 isCapturing = false
@@ -129,10 +129,15 @@ class StackingEngine(
             return
         }
 
-        activity.runOnUiThread { binding.tvProgress.text = "Saving... ($actualFramesStacked frames)" }
+        activity.runOnUiThread { binding.tvProgress.text = "Processing... ($actualFramesStacked f)" }
 
         Thread {
             try {
+                // Apply Bayer-aware Hot Pixel Removal in-place to save memory
+                if (isHotPixelRemovalEnabled) {
+                    applyHotPixelRemoval(canvas, canvasWidth, canvasHeight, actualFramesStacked)
+                }
+
                 val finalBuffer = ByteBuffer.allocateDirect(canvasWidth * canvasHeight * 2)
                 finalBuffer.order(ByteOrder.nativeOrder())
                 
@@ -147,6 +152,8 @@ class StackingEngine(
 
                 val ext = if (isDngMode && dngCaptureResult != null) "dng" else "raw"
                 val name = "ASTRO_${System.currentTimeMillis()}.$ext"
+
+                activity.runOnUiThread { binding.tvProgress.text = "Saving File..." }
 
                 val values = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -170,7 +177,7 @@ class StackingEngine(
                             out.write(bytes)
                         }
                     }
-                    activity.runOnUiThread { Toast.makeText(activity, "Saved to Gallery", Toast.LENGTH_LONG).show() }
+                    activity.runOnUiThread { Toast.makeText(activity, "Saved successfully!", Toast.LENGTH_LONG).show() }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Save error", e)
@@ -183,10 +190,43 @@ class StackingEngine(
         }.start()
     }
 
+    /**
+     * Replaces abnormally bright isolated pixels with the median of their same-color neighbors.
+     * Since this is a RAW Bayer CFA, same-color neighbors are 2 pixels away.
+     */
+    private fun applyHotPixelRemoval(canvas: IntArray, width: Int, height: Int, frames: Int) {
+        // Base noise threshold scales with frames. 
+        // 5000 is an arbitrary brightness difference that usually signifies a stuck sensor pixel.
+        val spikeThreshold = 5000 * frames 
+        
+        // Skip edges
+        for (y in 2 until height - 2) {
+            var idx = y * width + 2
+            for (x in 2 until width - 2) {
+                val p = canvas[idx]
+                
+                // Compare to same color pixels in the Bayer pattern
+                val left = canvas[idx - 2]
+                val right = canvas[idx + 2]
+                val up = canvas[idx - 2 * width]
+                val down = canvas[idx + 2 * width]
+                
+                val avgNeighbors = (left + right + up + down) / 4
+                
+                // If it is significantly brighter than its direct neighbors, it's a hot pixel.
+                if (p > avgNeighbors * 1.5 && (p - avgNeighbors) > spikeThreshold) {
+                    canvas[idx] = avgNeighbors
+                }
+                idx++
+            }
+        }
+    }
+
     fun resetUI() {
         activity.runOnUiThread {
             binding.processingOverlay.visibility = View.GONE
-            binding.mainUiLayout.visibility = View.VISIBLE
+            binding.btnCapture.visibility = View.VISIBLE
+            binding.btnDevOptions.visibility = View.VISIBLE
         }
     }
 }
