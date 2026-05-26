@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
+import android.graphics.Rect
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.media.Image
@@ -22,6 +23,8 @@ import com.astrostacker.lite.databinding.ActivityMainBinding
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -39,7 +42,9 @@ class MainActivity : AppCompatActivity() {
     private var stackingHandler: Handler? = null
 
     private var exposureRange: Range<Long>? = null
+    private var isoRange: Range<Int>? = null
     private var currentExposure: Long = 100000000L // 100ms default
+    private var currentIso: Int = 800
     private var stackCount: Int = 25
     
     private var isCapturing = false
@@ -49,7 +54,12 @@ class MainActivity : AppCompatActivity() {
     private var canvasHeight = 0
     
     private var isDngMode = true
-    private var dngCreator: DngCreator? = null
+    private var lastCaptureResult: TotalCaptureResult? = null
+
+    private var isTorchOn = false
+    private var sensorRect: Rect? = null
+    private var currentZoom = 1.0f
+    private val maxZoom = 10.0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,9 +72,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupUI() {
         binding.textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                openCamera()
-            }
+            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) { openCamera() }
             override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {}
             override fun onSurfaceTextureDestroyed(surface: SurfaceTexture) = true
             override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
@@ -76,10 +84,8 @@ class MainActivity : AppCompatActivity() {
                     val min = it.lower.toDouble().coerceAtLeast(1000.0)
                     val max = it.upper.toDouble()
                     val p = progress / 100.0
-                    val value = Math.exp(Math.log(min) + p * (Math.log(max) - Math.log(min))).toLong()
-                    currentExposure = value
-                    binding.tvExposure.text = "Exposure: ${value / 1000000}ms"
-                    // Lag Fix: Don't update preview exposure during adjustment
+                    currentExposure = exp(ln(min) + p * (ln(max) - ln(min))).toLong()
+                    binding.tvExposure.text = "EXP: ${currentExposure / 1000000}ms"
                 }
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -89,19 +95,49 @@ class MainActivity : AppCompatActivity() {
         binding.sbStackCount.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 stackCount = progress.coerceAtLeast(1)
-                binding.tvStackCount.text = "Stack Count: $stackCount"
+                binding.tvStackCount.text = "STACK: $stackCount"
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        binding.btnCapture.setOnClickListener {
-            if (!isCapturing) startCaptureBurst()
+        binding.sbIso.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                isoRange?.let {
+                    val min = it.lower.toDouble()
+                    val max = it.upper.toDouble()
+                    val p = progress / 100.0
+                    currentIso = exp(ln(min) + p * (ln(max) - ln(min))).toInt()
+                    binding.tvIso.text = "ISO: $currentIso"
+                    if (!isCapturing) updatePreview()
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        binding.sbZoom.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                currentZoom = 1.0f + (progress / 100.0f) * (maxZoom - 1.0f)
+                binding.tvZoom.text = "ZOOM: ${String.format("%.1fx", currentZoom)}"
+                updatePreview()
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        binding.btnTorch.setOnClickListener {
+            isTorchOn = !isTorchOn
+            updatePreview()
         }
 
         binding.btnSettings.setOnClickListener {
             isDngMode = !isDngMode
             Toast.makeText(this, "Save Format: ${if(isDngMode) "DNG" else "RAW BIN"}", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnCapture.setOnClickListener {
+            if (!isCapturing) startCaptureBurst()
         }
     }
 
@@ -147,12 +183,16 @@ class MainActivity : AppCompatActivity() {
         try {
             for (id in cameraManager.cameraIdList) {
                 val chars = cameraManager.getCameraCharacteristics(id)
-                val facing = chars.get(CameraCharacteristics.LENS_CAPABILITY_FLAGS) // Just iterate all
+                val facing = chars.get(CameraCharacteristics.LENS_FACING)
                 val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
                 
-                if (caps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) == true) {
+                if (facing == CameraCharacteristics.LENS_FACING_BACK && 
+                    caps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) == true) {
                     cameraId = id
                     exposureRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
+                    isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
+                    sensorRect = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+                    
                     val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                     val rawSize = map?.getOutputSizes(ImageFormat.RAW_SENSOR)?.firstOrNull()
                     
@@ -200,13 +240,28 @@ class MainActivity : AppCompatActivity() {
     private fun updatePreview() {
         val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW) ?: return
         builder.addTarget(Surface(binding.textureView.surfaceTexture))
-        
-        // LAG FIX: Auto exposure for preview, fixed only for capture
         builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
         builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
         builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f) 
+        builder.set(CaptureRequest.FLASH_MODE, if (isTorchOn) CaptureRequest.FLASH_MODE_TORCH else CaptureRequest.FLASH_MODE_OFF)
+        applyZoom(builder)
+        captureSession?.setRepeatingRequest(builder.build(), captureCallback, backgroundHandler)
+    }
 
-        captureSession?.setRepeatingRequest(builder.build(), null, backgroundHandler)
+    private fun applyZoom(builder: CaptureRequest.Builder) {
+        sensorRect?.let {
+            val centerX = it.centerX()
+            val centerY = it.centerY()
+            val deltaX = (0.5f * it.width() / currentZoom).toInt()
+            val deltaY = (0.5f * it.height() / currentZoom).toInt()
+            builder.set(CaptureRequest.SCALER_CROP_REGION, Rect(centerX - deltaX, centerY - deltaY, centerX + deltaX, centerY + deltaY))
+        }
+    }
+
+    private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+            lastCaptureResult = result
+        }
     }
 
     private fun startCaptureBurst() {
@@ -223,15 +278,14 @@ class MainActivity : AppCompatActivity() {
         val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE) ?: return
         builder.addTarget(imageReader!!.surface)
         builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-        builder.set(CaptureRequest.SENSOR_SENSITIVITY, 800)
+        builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
         builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f)
         builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-
-        val chars = cameraManager.getCameraCharacteristics(cameraId!!)
-        dngCreator = DngCreator(chars, builder.build())
+        builder.set(CaptureRequest.FLASH_MODE, if (isTorchOn) CaptureRequest.FLASH_MODE_TORCH else CaptureRequest.FLASH_MODE_OFF)
+        applyZoom(builder)
 
         val requests = List(stackCount) { builder.build() }
-        captureSession?.captureBurst(requests, null, backgroundHandler)
+        captureSession?.captureBurst(requests, captureCallback, backgroundHandler)
     }
 
     private fun processFrame(image: Image) {
@@ -261,6 +315,8 @@ class MainActivity : AppCompatActivity() {
     private fun finalizeStack() {
         val canvas = masterCanvas ?: return
         val finalBuffer = ByteBuffer.allocateDirect(canvasWidth * canvasHeight * 2)
+        finalBuffer.order(ByteOrder.nativeOrder())
+        
         for (i in canvas.indices) {
             val avg = (canvas[i] / stackCount).coerceIn(0, 65535).toShort()
             finalBuffer.putShort(avg)
@@ -270,17 +326,23 @@ class MainActivity : AppCompatActivity() {
         try {
             val publicDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AstroStacker")
             if (!publicDir.exists()) publicDir.mkdirs()
+            val fileName = "ASTRO_${System.currentTimeMillis()}.${if(isDngMode) "dng" else "raw"}"
+            val file = File(publicDir, fileName)
             
-            val ext = if (isDngMode) "dng" else "raw"
-            val file = File(publicDir, "ASTRO_${System.currentTimeMillis()}.$ext")
-            
-            FileOutputStream(file).use { out -> out.channel.write(finalBuffer) }
+            FileOutputStream(file).use { out ->
+                if (isDngMode && lastCaptureResult != null) {
+                    val chars = cameraManager.getCameraCharacteristics(cameraId!!)
+                    val dng = DngCreator(chars, lastCaptureResult!!)
+                    dng.writeByteBuffer(out, canvasWidth, canvasHeight, finalBuffer, 0)
+                    dng.close()
+                } else {
+                    out.channel.write(finalBuffer)
+                }
+            }
 
-            // Thumbnail Fix: Force Media Scanner update
             android.media.MediaScannerConnection.scanFile(this, arrayOf(file.absolutePath), null) { _, _ -> }
-
             runOnUiThread { 
-                Toast.makeText(this, "Saved to Gallery: ${file.name}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Saved: ${file.name}", Toast.LENGTH_SHORT).show()
                 resetUI()
             }
         } catch (e: Exception) { 
@@ -292,8 +354,6 @@ class MainActivity : AppCompatActivity() {
     private fun resetUI() {
         isCapturing = false
         masterCanvas = null
-        dngCreator?.close()
-        dngCreator = null
         runOnUiThread {
             binding.statusOverlay.visibility = View.GONE
             binding.btnCapture.isEnabled = true
