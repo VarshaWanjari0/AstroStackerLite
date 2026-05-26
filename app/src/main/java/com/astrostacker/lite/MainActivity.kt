@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity() {
         binding.sbExposure.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 exposureRange?.let {
-                    val min = it.lower.toDouble()
+                    val min = it.lower.toDouble().coerceAtLeast(1000.0)
                     val max = it.upper.toDouble()
                     val p = progress / 100.0
                     val value = Math.exp(Math.log(min) + p * (Math.log(max) - Math.log(min))).toLong()
@@ -109,6 +109,13 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 101 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (binding.textureView.isAvailable) openCamera()
+        }
+    }
+
     private fun startThreads() {
         backgroundThread = HandlerThread("CameraBackground").also { it.start() }
         backgroundHandler = Handler(backgroundThread!!.looper)
@@ -126,6 +133,8 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun openCamera() {
+        if (cameraDevice != null) return
+
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE), 101)
             return
