@@ -10,6 +10,7 @@ import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
 import android.os.*
+import android.util.Range
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
