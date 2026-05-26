@@ -10,6 +10,7 @@ import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
 import android.os.*
+import android.util.Log
 import android.util.Range
 import android.view.Surface
 import android.view.TextureView
@@ -34,19 +35,21 @@ class MainActivity : AppCompatActivity() {
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
 
-    // Stacking Thread for heavy math
     private var stackingThread: HandlerThread? = null
     private var stackingHandler: Handler? = null
 
     private var exposureRange: Range<Long>? = null
-    private var currentExposure: Long = 100000000L // 100ms
+    private var currentExposure: Long = 100000000L // 100ms default
     private var stackCount: Int = 25
     
     private var isCapturing = false
     private var currentCaptureCount = 0
-    private var masterCanvas: LongArray? = null // Use Long to prevent overflow during summing
+    private var masterCanvas: LongArray? = null
     private var canvasWidth = 0
     private var canvasHeight = 0
+    
+    private var isDngMode = true
+    private var dngCreator: DngCreator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,7 +79,7 @@ class MainActivity : AppCompatActivity() {
                     val value = Math.exp(Math.log(min) + p * (Math.log(max) - Math.log(min))).toLong()
                     currentExposure = value
                     binding.tvExposure.text = "Exposure: ${value / 1000000}ms"
-                    if (!isCapturing) updatePreview()
+                    // Lag Fix: Don't update preview exposure during adjustment
                 }
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -94,6 +97,11 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnCapture.setOnClickListener {
             if (!isCapturing) startCaptureBurst()
+        }
+
+        binding.btnSettings.setOnClickListener {
+            isDngMode = !isDngMode
+            Toast.makeText(this, "Save Format: ${if(isDngMode) "DNG" else "RAW BIN"}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -119,7 +127,6 @@ class MainActivity : AppCompatActivity() {
     private fun startThreads() {
         backgroundThread = HandlerThread("CameraBackground").also { it.start() }
         backgroundHandler = Handler(backgroundThread!!.looper)
-        
         stackingThread = HandlerThread("StackingEngine").also { it.start() }
         stackingHandler = Handler(stackingThread!!.looper)
     }
@@ -127,14 +134,11 @@ class MainActivity : AppCompatActivity() {
     private fun stopThreads() {
         backgroundThread?.quitSafely()
         stackingThread?.quitSafely()
-        backgroundThread = null
-        stackingThread = null
     }
 
     @SuppressLint("MissingPermission")
     private fun openCamera() {
         if (cameraDevice != null) return
-
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE), 101)
             return
@@ -143,12 +147,10 @@ class MainActivity : AppCompatActivity() {
         try {
             for (id in cameraManager.cameraIdList) {
                 val chars = cameraManager.getCameraCharacteristics(id)
-                val facing = chars.get(CameraCharacteristics.LENS_FACING)
+                val facing = chars.get(CameraCharacteristics.LENS_CAPABILITY_FLAGS) // Just iterate all
                 val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
                 
-                if (facing == CameraCharacteristics.LENS_FACING_BACK &&
-                    caps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) == true) {
-                    
+                if (caps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) == true) {
                     cameraId = id
                     exposureRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
                     val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
@@ -163,10 +165,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-            Toast.makeText(this, "Hardware Not Supported", Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     private val stateCallback = object : CameraDevice.StateCallback() {
@@ -174,24 +173,15 @@ class MainActivity : AppCompatActivity() {
             cameraDevice = camera
             createPreviewSession()
         }
-        override fun onDisconnected(camera: CameraDevice) {
-            cameraDevice?.close()
-        }
-        override fun onError(camera: CameraDevice, error: Int) {
-            cameraDevice?.close()
-        }
+        override fun onDisconnected(camera: CameraDevice) { cameraDevice?.close(); cameraDevice = null }
+        override fun onError(camera: CameraDevice, error: Int) { cameraDevice?.close(); cameraDevice = null }
     }
 
     private fun setupImageReader(w: Int, h: Int) {
         imageReader = ImageReader.newInstance(w, h, ImageFormat.RAW_SENSOR, 5).apply {
             setOnImageAvailableListener({ reader ->
                 val img = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
-                if (isCapturing) {
-                    // Offload math to stacking thread immediately
-                    stackingHandler?.post { processFrame(img) }
-                } else {
-                    img.close()
-                }
+                if (isCapturing) stackingHandler?.post { processFrame(img) } else img.close()
             }, backgroundHandler)
         }
     }
@@ -211,12 +201,10 @@ class MainActivity : AppCompatActivity() {
         val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW) ?: return
         builder.addTarget(Surface(binding.textureView.surfaceTexture))
         
-        // Astro Locks
+        // LAG FIX: Auto exposure for preview, fixed only for capture
+        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
         builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-        builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f) // Infinity
-        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-        builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-        builder.set(CaptureRequest.SENSOR_SENSITIVITY, 1600) // High ISO for preview
+        builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f) 
 
         captureSession?.setRepeatingRequest(builder.build(), null, backgroundHandler)
     }
@@ -237,6 +225,10 @@ class MainActivity : AppCompatActivity() {
         builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
         builder.set(CaptureRequest.SENSOR_SENSITIVITY, 800)
         builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f)
+        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+
+        val chars = cameraManager.getCameraCharacteristics(cameraId!!)
+        dngCreator = DngCreator(chars, builder.build())
 
         val requests = List(stackCount) { builder.build() }
         captureSession?.captureBurst(requests, null, backgroundHandler)
@@ -262,17 +254,13 @@ class MainActivity : AppCompatActivity() {
         image.close()
         
         currentCaptureCount++
-        runOnUiThread {
-            binding.tvStatus.text = "Stacking: $currentCaptureCount/$stackCount"
-        }
-
+        runOnUiThread { binding.tvStatus.text = "Stacking: $currentCaptureCount/$stackCount" }
         if (currentCaptureCount >= stackCount) finalizeStack()
     }
 
     private fun finalizeStack() {
         val canvas = masterCanvas ?: return
         val finalBuffer = ByteBuffer.allocateDirect(canvasWidth * canvasHeight * 2)
-        
         for (i in canvas.indices) {
             val avg = (canvas[i] / stackCount).coerceIn(0, 65535).toShort()
             finalBuffer.putShort(avg)
@@ -280,29 +268,42 @@ class MainActivity : AppCompatActivity() {
         finalBuffer.rewind()
 
         try {
-            val folder = File(getExternalFilesDir(null), "AstroStacker")
-            if (!folder.exists()) folder.mkdirs()
-            val file = File(folder, "STACK_${System.currentTimeMillis()}.raw")
+            val publicDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "AstroStacker")
+            if (!publicDir.exists()) publicDir.mkdirs()
             
-            FileOutputStream(file).use { it.channel.write(finalBuffer) }
+            val ext = if (isDngMode) "dng" else "raw"
+            val file = File(publicDir, "ASTRO_${System.currentTimeMillis()}.$ext")
+            
+            FileOutputStream(file).use { out -> out.channel.write(finalBuffer) }
+
+            // Thumbnail Fix: Force Media Scanner update
+            android.media.MediaScannerConnection.scanFile(this, arrayOf(file.absolutePath), null) { _, _ -> }
+
             runOnUiThread { 
-                Toast.makeText(this, "Saved to ${file.name}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Saved to Gallery: ${file.name}", Toast.LENGTH_LONG).show()
                 resetUI()
             }
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) { 
+            e.printStackTrace()
+            runOnUiThread { Toast.makeText(this, "Save Failed", Toast.LENGTH_SHORT).show() }
+        }
     }
 
     private fun resetUI() {
         isCapturing = false
         masterCanvas = null
-        binding.statusOverlay.visibility = View.GONE
-        binding.btnCapture.isEnabled = true
-        updatePreview()
+        dngCreator?.close()
+        dngCreator = null
+        runOnUiThread {
+            binding.statusOverlay.visibility = View.GONE
+            binding.btnCapture.isEnabled = true
+            updatePreview()
+        }
     }
 
     private fun closeCamera() {
-        captureSession?.close()
-        cameraDevice?.close()
-        imageReader?.close()
+        captureSession?.close(); captureSession = null
+        cameraDevice?.close(); cameraDevice = null
+        imageReader?.close(); imageReader = null
     }
 }
