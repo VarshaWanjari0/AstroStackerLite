@@ -13,6 +13,7 @@ import android.media.ImageReader
 import android.os.*
 import android.util.Log
 import android.util.Range
+import android.util.Size
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
@@ -137,8 +138,24 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnCapture.setOnClickListener {
-            if (!isCapturing) startCaptureBurst()
+            if (!isCapturing) startCountdown()
         }
+    }
+
+    private fun startCountdown() {
+        val timerValue = 5
+        binding.tvTimer.visibility = View.VISIBLE
+        binding.btnCapture.isEnabled = false
+        
+        object : CountDownTimer((timerValue * 1000).toLong(), 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                binding.tvTimer.text = "${(millisUntilFinished / 1000) + 1}"
+            }
+            override fun onFinish() {
+                binding.tvTimer.visibility = View.GONE
+                startCaptureBurst()
+            }
+        }.start()
     }
 
     override fun onResume() {
@@ -333,7 +350,8 @@ class MainActivity : AppCompatActivity() {
                 if (isDngMode && lastCaptureResult != null) {
                     val chars = cameraManager.getCameraCharacteristics(cameraId!!)
                     val dng = DngCreator(chars, lastCaptureResult!!)
-                    dng.writeByteBuffer(out, canvasWidth, canvasHeight, finalBuffer, 0)
+                    // FIX: Pass Size object and use Long for offset
+                    dng.writeByteBuffer(out, Size(canvasWidth, canvasHeight), finalBuffer, 0L)
                     dng.close()
                 } else {
                     out.channel.write(finalBuffer)
