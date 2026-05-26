@@ -1,24 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
     android:keepScreenOn="true">
 
+    <!-- Camera Preview -->
     <TextureView
         android:id="@+id/textureView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Dark Gradient for UI contrast -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/vignette_gradient" />
+
+    <!-- Massive Countdown Timer -->
     <TextView
         android:id="@+id/tvTimer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="5"
         android:textColor="#FF4444"
-        android:textSize="120sp"
+        android:textSize="144sp"
         android:textStyle="bold"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -26,186 +33,198 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <View
+    <!-- Processing Overlay -->
+    <LinearLayout
+        android:id="@+id/processingOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/vignette_gradient" />
-
-    <!-- Status Overlay for Stacking -->
-    <FrameLayout
-        android:id="@+id/statusOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#A0000000"
+        android:background="#D9000000"
+        android:gravity="center"
+        android:orientation="vertical"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        android:elevation="10dp">
 
-        <LinearLayout
+        <ProgressBar
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:indeterminateTint="#FF4444" />
+
+        <TextView
+            android:id="@+id/tvProgress"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:orientation="vertical"
-            android:gravity="center">
+            android:layout_marginTop="24dp"
+            android:text="Stacking: 0/25"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.05" />
+            
+        <TextView
+            android:id="@+id/tvProgressSub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Please hold still..."
+            android:textColor="#AAAAAA"
+            android:textSize="14sp" />
+    </LinearLayout>
 
-            <ProgressBar
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:indeterminateTint="#FF4444" />
-
-            <TextView
-                android:id="@+id/tvStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="Stacking: 0/25"
-                android:textColor="#FFFFFF"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-    </FrameLayout>
-
+    <!-- Top Status Bar -->
     <LinearLayout
-        android:id="@+id/controlsLayout"
+        android:id="@+id/topBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/bg_controls"
-        android:orientation="vertical"
-        android:padding="24dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
-        <!-- Zoom Control -->
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical"
+        app:layout_constraintTop_toTopOf="parent">
+        
         <TextView
-            android:id="@+id/tvZoom"
-            android:layout_width="wrap_content"
+            android:id="@+id/tvCurrentFormat"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="ZOOM: 1.0x"
-            android:textColor="#BBBBBB"
-            android:textSize="12sp"
-            android:textAllCaps="true"
-            android:letterSpacing="0.1" />
-
-        <SeekBar
-            android:id="@+id/sbZoom"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:max="100"
-            android:progress="0"
-            android:progressDrawable="@drawable/custom_seekbar"
-            android:thumb="@drawable/custom_thumb" />
-
-        <!-- Exposure Control -->
-        <TextView
-            android:id="@+id/tvExposure"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="EXP: 100ms"
-            android:textColor="#BBBBBB"
-            android:textSize="12sp"
-            android:textAllCaps="true"
-            android:letterSpacing="0.1" />
-
-        <SeekBar
-            android:id="@+id/sbExposure"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:max="100"
-            android:progress="50"
-            android:progressDrawable="@drawable/custom_seekbar"
-            android:thumb="@drawable/custom_thumb" />
-
-        <!-- ISO Control -->
-        <TextView
-            android:id="@+id/tvIso"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="ISO: 800"
-            android:textColor="#BBBBBB"
-            android:textSize="12sp"
-            android:textAllCaps="true"
-            android:letterSpacing="0.1" />
-
-        <SeekBar
-            android:id="@+id/sbIso"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:max="100"
-            android:progress="25"
-            android:progressDrawable="@drawable/custom_seekbar"
-            android:thumb="@drawable/custom_thumb" />
-
-        <!-- Stack Count Control -->
-        <TextView
-            android:id="@+id/tvStackCount"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="STACK: 25"
-            android:textColor="#BBBBBB"
-            android:textSize="12sp"
-            android:textAllCaps="true"
-            android:letterSpacing="0.1" />
-
-        <SeekBar
-            android:id="@+id/sbStackCount"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:max="100"
-            android:progress="25"
-            android:progressDrawable="@drawable/custom_seekbar"
-            android:thumb="@drawable/custom_thumb" />
-
-        <!-- Bottom Actions -->
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="100dp"
-            android:layout_marginTop="24dp">
-
-            <ImageButton
-                android:id="@+id/btnTorch"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_alignParentStart="true"
-                android:layout_centerVertical="true"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_compass"
-                app:tint="#FFFFFF" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnCapture"
-                android:layout_width="80dp"
-                android:layout_height="80dp"
-                android:layout_centerInParent="true"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                app:cornerRadius="40dp"
-                app:icon="@drawable/ic_shutter"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp"
-                app:iconSize="48dp"
-                android:backgroundTint="#FF4444"
-                app:rippleColor="#FFFFFF" />
-
-            <ImageButton
-                android:id="@+id/btnSettings"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_alignParentEnd="true"
-                android:layout_centerVertical="true"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_settings"
-                app:tint="#FFFFFF" />
-
-        </RelativeLayout>
+            android:layout_weight="1"
+            android:text="FORMAT: DNG"
+            android:textColor="#FF4444"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+            
+        <ImageButton
+            android:id="@+id/btnFormatToggle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_settings"
+            app:tint="#FFFFFF" />
     </LinearLayout>
+
+    <!-- Bottom Controls Panel -->
+    <ScrollView
+        android:id="@+id/controlsPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toBottomOf="parent">
+        
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_controls"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <!-- Zoom -->
+            <TextView
+                android:id="@+id/tvZoom"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ZOOM: 1.0x"
+                android:textColor="#BBBBBB"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+            <SeekBar
+                android:id="@+id/sbZoom"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="16dp"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/custom_seekbar"
+                android:thumb="@drawable/custom_thumb" />
+
+            <!-- Exposure -->
+            <TextView
+                android:id="@+id/tvExposure"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="EXP: 100ms"
+                android:textColor="#BBBBBB"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+            <SeekBar
+                android:id="@+id/sbExposure"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="16dp"
+                android:max="100"
+                android:progress="50"
+                android:progressDrawable="@drawable/custom_seekbar"
+                android:thumb="@drawable/custom_thumb" />
+
+            <!-- ISO -->
+            <TextView
+                android:id="@+id/tvIso"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ISO: 800"
+                android:textColor="#BBBBBB"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+            <SeekBar
+                android:id="@+id/sbIso"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="16dp"
+                android:max="100"
+                android:progress="25"
+                android:progressDrawable="@drawable/custom_seekbar"
+                android:thumb="@drawable/custom_thumb" />
+
+            <!-- Stack Count -->
+            <TextView
+                android:id="@+id/tvStackCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="STACK: 25"
+                android:textColor="#BBBBBB"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+            <SeekBar
+                android:id="@+id/sbStackCount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="24dp"
+                android:max="100"
+                android:progress="25"
+                android:progressDrawable="@drawable/custom_seekbar"
+                android:thumb="@drawable/custom_thumb" />
+
+            <!-- Action Buttons -->
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="80dp">
+
+                <ImageButton
+                    android:id="@+id/btnTorch"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_alignParentStart="true"
+                    android:layout_centerVertical="true"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_menu_compass"
+                    app:tint="#FFFFFF" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCapture"
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:layout_centerInParent="true"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    app:cornerRadius="40dp"
+                    app:icon="@drawable/ic_shutter"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp"
+                    app:iconSize="48dp"
+                    android:backgroundTint="#FF4444"
+                    app:rippleColor="#FFFFFF" />
+
+            </RelativeLayout>
+        </LinearLayout>
+    </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>
