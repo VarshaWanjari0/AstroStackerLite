@@ -6,26 +6,18 @@
     android:background="#000000"
     android:keepScreenOn="true">
 
-    <!-- Camera Preview -->
     <TextureView
         android:id="@+id/textureView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Dark Gradient for UI contrast -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@drawable/vignette_gradient" />
-
-    <!-- Massive Countdown Timer -->
     <TextView
         android:id="@+id/tvTimer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="5"
         android:textColor="#FF4444"
-        android:textSize="144sp"
+        android:textSize="120sp"
         android:textStyle="bold"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -33,7 +25,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Processing Overlay -->
     <LinearLayout
         android:id="@+id/processingOverlay"
         android:layout_width="match_parent"
@@ -41,8 +32,7 @@
         android:background="#D9000000"
         android:gravity="center"
         android:orientation="vertical"
-        android:visibility="gone"
-        android:elevation="10dp">
+        android:visibility="gone">
 
         <ProgressBar
             android:layout_width="64dp"
@@ -57,174 +47,52 @@
             android:text="Stacking: 0/25"
             android:textColor="#FFFFFF"
             android:textSize="20sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.05" />
-            
-        <TextView
-            android:id="@+id/tvProgressSub"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Please hold still..."
-            android:textColor="#AAAAAA"
-            android:textSize="14sp" />
-    </LinearLayout>
-
-    <!-- Top Status Bar -->
-    <LinearLayout
-        android:id="@+id/topBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="16dp"
-        android:gravity="center_vertical"
-        app:layout_constraintTop_toTopOf="parent">
-        
-        <TextView
-            android:id="@+id/tvCurrentFormat"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="FORMAT: DNG"
-            android:textColor="#FF4444"
-            android:textSize="14sp"
             android:textStyle="bold" />
-            
-        <ImageButton
-            android:id="@+id/btnFormatToggle"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_settings"
-            app:tint="#FFFFFF" />
     </LinearLayout>
 
-    <!-- Bottom Controls Panel -->
-    <ScrollView
+    <LinearLayout
         android:id="@+id/controlsPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:fillViewport="true"
+        android:background="#A0000000"
+        android:orientation="vertical"
+        android:padding="16dp"
         app:layout_constraintBottom_toBottomOf="parent">
-        
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_controls"
-            android:orientation="vertical"
-            android:padding="24dp">
 
-            <!-- Zoom -->
-            <TextView
-                android:id="@+id/tvZoom"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="ZOOM: 1.0x"
-                android:textColor="#BBBBBB"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-            <SeekBar
-                android:id="@+id/sbZoom"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="16dp"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/custom_seekbar"
-                android:thumb="@drawable/custom_thumb" />
-
-            <!-- Exposure -->
-            <TextView
-                android:id="@+id/tvExposure"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="EXP: 100ms"
-                android:textColor="#BBBBBB"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-            <SeekBar
-                android:id="@+id/sbExposure"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="16dp"
-                android:max="100"
-                android:progress="50"
-                android:progressDrawable="@drawable/custom_seekbar"
-                android:thumb="@drawable/custom_thumb" />
-
-            <!-- ISO -->
-            <TextView
-                android:id="@+id/tvIso"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="ISO: 800"
-                android:textColor="#BBBBBB"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-            <SeekBar
-                android:id="@+id/sbIso"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="16dp"
-                android:max="100"
-                android:progress="25"
-                android:progressDrawable="@drawable/custom_seekbar"
-                android:thumb="@drawable/custom_thumb" />
-
-            <!-- Stack Count -->
-            <TextView
-                android:id="@+id/tvStackCount"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="STACK: 25"
-                android:textColor="#BBBBBB"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-            <SeekBar
-                android:id="@+id/sbStackCount"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="24dp"
-                android:max="100"
-                android:progress="25"
-                android:progressDrawable="@drawable/custom_seekbar"
-                android:thumb="@drawable/custom_thumb" />
-
-            <!-- Action Buttons -->
-            <RelativeLayout
-                android:layout_width="match_parent"
-                android:layout_height="80dp">
-
-                <ImageButton
-                    android:id="@+id/btnTorch"
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_alignParentStart="true"
-                    android:layout_centerVertical="true"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@android:drawable/ic_menu_compass"
-                    app:tint="#FFFFFF" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnCapture"
-                    android:layout_width="80dp"
-                    android:layout_height="80dp"
-                    android:layout_centerInParent="true"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    app:cornerRadius="40dp"
-                    app:icon="@drawable/ic_shutter"
-                    app:iconGravity="textStart"
-                    app:iconPadding="0dp"
-                    app:iconSize="48dp"
-                    android:backgroundTint="#FF4444"
-                    app:rippleColor="#FFFFFF" />
-
-            </RelativeLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+            <TextView android:id="@+id/tvZoom" android:layout_width="80dp" android:layout_height="wrap_content" android:text="1.0x" android:textColor="#FFF" />
+            <SeekBar android:id="@+id/sbZoom" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="0" />
         </LinearLayout>
-    </ScrollView>
+        
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+            <TextView android:id="@+id/tvIso" android:layout_width="80dp" android:layout_height="wrap_content" android:text="ISO 800" android:textColor="#FFF" />
+            <SeekBar android:id="@+id/sbIso" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="25" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+            <TextView android:id="@+id/tvExposure" android:layout_width="80dp" android:layout_height="wrap_content" android:text="100ms" android:textColor="#FFF" />
+            <SeekBar android:id="@+id/sbExposure" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="50" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="8dp">
+            <TextView android:id="@+id/tvStack" android:layout_width="80dp" android:layout_height="wrap_content" android:text="25 f" android:textColor="#FFF" />
+            <SeekBar android:id="@+id/sbStack" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="25" />
+        </LinearLayout>
+
+        <RelativeLayout android:layout_width="match_parent" android:layout_height="80dp" android:layout_marginTop="16dp">
+            <ImageButton android:id="@+id/btnTorch" android:layout_width="48dp" android:layout_height="48dp" android:layout_alignParentStart="true" android:layout_centerVertical="true" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_compass" app:tint="#FFFFFF" />
+            
+            <com.google.android.material.button.MaterialButton 
+                android:id="@+id/btnCapture" 
+                android:layout_width="64dp" 
+                android:layout_height="64dp" 
+                android:layout_centerInParent="true" 
+                app:cornerRadius="32dp" 
+                android:backgroundTint="#FF4444" 
+                android:insetTop="0dp" 
+                android:insetBottom="0dp" />
+                
+            <Button android:id="@+id/btnFormat" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentEnd="true" android:layout_centerVertical="true" android:text="DNG" android:backgroundTint="#333333" android:textColor="#FFF" />
+        </RelativeLayout>
+    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
