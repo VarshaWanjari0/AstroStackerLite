@@ -139,7 +139,11 @@
 
             <!-- Stack Count -->
             <TextView android:id="@+id/tvDevStack" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Stack Target: 25 frames" android:textColor="#FFF" android:textStyle="bold"/>
-            <SeekBar android:id="@+id/sbDevStack" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="32dp" android:max="100" android:progress="24" />
+            <SeekBar android:id="@+id/sbDevStack" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="16dp" android:max="100" android:progress="24" />
+
+            <!-- Timer Duration -->
+            <TextView android:id="@+id/tvDevTimer" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Anti-Shake Timer: 5s" android:textColor="#FFF" android:textStyle="bold"/>
+            <SeekBar android:id="@+id/sbDevTimer" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="32dp" android:max="30" android:progress="5" />
 
             <Button android:id="@+id/btnDevFormat" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Save Format: DNG" android:backgroundTint="#333" android:textColor="#FFF" android:layout_marginBottom="48dp"/>
             

@@ -16,6 +16,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var cameraEngine: CameraEngine
     private lateinit var stackingEngine: StackingEngine
+    private var countdownSeconds = 5
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,6 +112,15 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
+        binding.sbDevTimer.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                countdownSeconds = progress
+                binding.tvDevTimer.text = "Anti-Shake Timer: ${countdownSeconds}s"
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+
         binding.btnDevFormat.setOnClickListener {
             stackingEngine.isDngMode = !stackingEngine.isDngMode
             binding.btnDevFormat.text = "Save Format: ${if (stackingEngine.isDngMode) "DNG" else "RAW BIN"}"
@@ -119,8 +129,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun startCountdown() {
         binding.mainUiLayout.visibility = View.GONE
+        
+        // Show the indicator immediately so user knows it's doing something
+        binding.processingOverlay.visibility = View.VISIBLE
+        binding.tvProgress.text = "Stabilizing..."
+        
+        if (countdownSeconds <= 0) {
+            binding.tvTimer.visibility = View.GONE
+            cameraEngine.startBurstCapture()
+            return
+        }
+
         binding.tvTimer.visibility = View.VISIBLE
-        object : CountDownTimer(5000, 1000) {
+        object : CountDownTimer((countdownSeconds * 1000).toLong(), 1000) {
             override fun onTick(m: Long) { binding.tvTimer.text = "${m / 1000 + 1}" }
             override fun onFinish() {
                 binding.tvTimer.visibility = View.GONE

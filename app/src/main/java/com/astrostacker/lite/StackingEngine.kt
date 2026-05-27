@@ -135,8 +135,13 @@ class StackingEngine(
 
                 activity.runOnUiThread { binding.tvProgress.text = "Encoding Output..." }
                 val finalBuffer = ByteBuffer.allocateDirect(canvasWidth * canvasHeight * 2).apply { order(ByteOrder.nativeOrder()) }
+                
+                // Additive Stacking: Instead of dividing by effectiveFrames, we let the light accumulate.
+                // We use a baseline division to prevent instant blowout, but overall it multiplies signal.
+                val baseDivider = Math.max(1f, effectiveFrames * 0.2f)
+                
                 for (i in canvas.indices) {
-                    val pixel = (canvas[i].toFloat() / effectiveFrames) * brightnessMultiplier
+                    val pixel = (canvas[i].toFloat() / baseDivider) * brightnessMultiplier
                     finalBuffer.putShort(pixel.coerceIn(0f, 65535f).toInt().toShort())
                 }
                 finalBuffer.rewind()
@@ -176,7 +181,8 @@ class StackingEngine(
      * Prevents clipping stars, because a star will illuminate multiple same-color pixels.
      */
     private fun applyAdvancedHotPixelFilter(canvas: IntArray, frames: Int) {
-        val spike = 2000 * frames
+        // Significantly loosen the threshold so faint stars are not erased.
+        val spike = 10000 * frames 
         for (y in 2 until canvasHeight - 2) {
             var i = y * canvasWidth + 2
             for (x in 2 until canvasWidth - 2) {
