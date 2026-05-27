@@ -6,7 +6,6 @@
     android:background="#000"
     android:keepScreenOn="true">
 
-    <!-- Camera Preview -->
     <TextureView
         android:id="@+id/textureView"
         android:layout_width="match_parent"
@@ -43,7 +42,6 @@
             app:iconPadding="0dp"
             app:iconSize="48dp" />
 
-        <!-- Anti-shake Timer -->
         <TextView
             android:id="@+id/tvTimer"
             android:layout_width="200dp"
@@ -58,7 +56,7 @@
             android:visibility="gone" />
     </FrameLayout>
 
-    <!-- Unobtrusive Capture Indicator (Replaces the dark fullscreen overlay) -->
+    <!-- Top Capture Pill -->
     <LinearLayout
         android:id="@+id/processingOverlay"
         android:layout_width="wrap_content"
@@ -70,25 +68,11 @@
         android:paddingHorizontal="24dp"
         android:paddingVertical="12dp"
         android:visibility="gone"
-        android:elevation="10dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
-        
-        <ProgressBar 
-            android:layout_width="24dp" 
-            android:layout_height="24dp" 
-            android:indeterminateTint="#FF4444" 
-            android:layout_marginEnd="12dp"/>
-            
-        <TextView 
-            android:id="@+id/tvProgress" 
-            android:layout_width="wrap_content" 
-            android:layout_height="wrap_content" 
-            android:text="Capturing: 0/25" 
-            android:textColor="#FFF" 
-            android:textSize="16sp" 
-            android:textStyle="bold" />
+        <ProgressBar android:layout_width="24dp" android:layout_height="24dp" android:indeterminateTint="#FF4444" android:layout_marginEnd="12dp"/>
+        <TextView android:id="@+id/tvProgress" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Capturing: 0/25" android:textColor="#FFF" android:textSize="16sp" android:textStyle="bold" />
     </LinearLayout>
 
     <!-- Developer Options Panel -->
@@ -98,7 +82,6 @@
         android:layout_height="match_parent"
         android:background="#E6000000"
         android:visibility="gone"
-        android:elevation="20dp"
         android:fillViewport="true">
         
         <LinearLayout
@@ -108,37 +91,43 @@
             android:padding="24dp">
 
             <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="24dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DEVELOPER OPTIONS" android:textColor="#FF4444" android:textSize="18sp" android:textStyle="bold" android:layout_centerVertical="true"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ASTRO DEV SETTINGS" android:textColor="#FF4444" android:textSize="18sp" android:textStyle="bold" android:layout_centerVertical="true"/>
                 <ImageButton android:id="@+id/btnCloseDev" android:layout_width="48dp" android:layout_height="48dp" android:layout_alignParentEnd="true" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_close_clear_cancel" app:tint="#FFF" />
             </RelativeLayout>
 
-            <!-- Lag Free Preview Toggle -->
+            <!-- Sigma Clipping Toggle -->
             <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/swAutoPreview"
+                android:id="@+id/swSigmaClip"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Auto-Exposure Preview (Fix Lag)"
+                android:text="Sigma-Clipping (Satellite Trail Removal)"
                 android:textColor="#FFF"
                 android:checked="true"
-                android:layout_marginBottom="16dp"/>
+                android:layout_marginBottom="8dp"/>
 
-            <!-- Hot Pixel Toggle -->
+            <!-- Hot Pixel Remover Toggle -->
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swHotPixel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Hot Pixel Remover"
+                android:text="Bayer-Aware Hot Pixel Filter"
                 android:textColor="#FFF"
                 android:checked="true"
-                android:layout_marginBottom="16dp"/>
+                android:layout_marginBottom="8dp"/>
+
+            <!-- Auto Preview Toggle -->
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swAutoPreview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Lag-Free Auto Preview"
+                android:textColor="#FFF"
+                android:checked="true"
+                android:layout_marginBottom="24dp"/>
 
             <!-- Brightness Multiplier -->
             <TextView android:id="@+id/tvDevBrightness" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Brightness Boost: 1.0x" android:textColor="#FFF" android:textStyle="bold"/>
             <SeekBar android:id="@+id/sbDevBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="16dp" android:max="100" android:progress="0" />
-
-            <!-- Zoom -->
-            <TextView android:id="@+id/tvDevZoom" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Digital Zoom: 1.0x" android:textColor="#FFF" android:textStyle="bold"/>
-            <SeekBar android:id="@+id/sbDevZoom" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="16dp" android:max="100" android:progress="0" />
 
             <!-- ISO -->
             <TextView android:id="@+id/tvDevIso" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ISO: 800" android:textColor="#FFF" android:textStyle="bold"/>
@@ -150,17 +139,9 @@
 
             <!-- Stack Count -->
             <TextView android:id="@+id/tvDevStack" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Stack Target: 25 frames" android:textColor="#FFF" android:textStyle="bold"/>
-            <SeekBar android:id="@+id/sbDevStack" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="16dp" android:max="100" android:progress="24" />
+            <SeekBar android:id="@+id/sbDevStack" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="32dp" android:max="100" android:progress="24" />
 
-            <!-- Focus Distance -->
-            <TextView android:id="@+id/tvDevFocus" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Focus: Infinity" android:textColor="#FFF" android:textStyle="bold"/>
-            <SeekBar android:id="@+id/sbDevFocus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:layout_marginBottom="24dp" android:max="100" android:progress="0" />
-
-            <!-- Toggles -->
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center" android:layout_marginBottom="32dp">
-                <Button android:id="@+id/btnDevFormat" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Format: DNG" android:backgroundTint="#333" android:textColor="#FFF" android:layout_marginEnd="8dp"/>
-                <Button android:id="@+id/btnDevTorch" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Torch: OFF" android:backgroundTint="#333" android:textColor="#FFF" android:layout_marginStart="8dp"/>
-            </LinearLayout>
+            <Button android:id="@+id/btnDevFormat" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Save Format: DNG" android:backgroundTint="#333" android:textColor="#FFF" android:layout_marginBottom="48dp"/>
             
         </LinearLayout>
     </ScrollView>

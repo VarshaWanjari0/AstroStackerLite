@@ -36,36 +36,32 @@ class CameraEngine(
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
 
-    // Capabilities
+    // State
+    var currentIso = 800
+    var currentExposure = 100_000_000L
+    var isAutoPreviewEnabled = true
+    private var isCapturing = false
+
     private var sensorRect: Rect? = null
     private var isoRange: Range<Int>? = null
     private var exposureRange: Range<Long>? = null
     private var isManualSupported = false
 
-    // State
-    var currentZoom = 1.0f
-    var currentIso = 800
-    var currentExposure = 100_000_000L
-    var currentFocusDistance = 0.0f
-    var isTorchOn = false
-    var isCapturing = false
-    var isAutoPreviewEnabled = true // Fixes camera lag during preview
-
     fun start() {
-        startBackgroundThread()
-        if (binding.textureView.isAvailable) {
-            openCamera()
-        } else {
-            binding.textureView.surfaceTextureListener = textureListener
-        }
+        backgroundThread = HandlerThread("CameraBg").apply { start() }
+        backgroundHandler = Handler(backgroundThread!!.looper)
+        if (binding.textureView.isAvailable) openCamera()
+        else binding.textureView.surfaceTextureListener = textureListener
     }
 
     fun stop() {
         closeCamera()
-        stopBackgroundThread()
+        backgroundThread?.quitSafely()
+        backgroundThread = null
+        backgroundHandler = null
     }
 
-    fun isReady(): Boolean = cameraDevice != null && captureSession != null && !isCapturing
+    fun isReady() = cameraDevice != null && captureSession != null && !isCapturing
 
     private val textureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) = openCamera()
@@ -74,55 +70,35 @@ class CameraEngine(
         override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
     }
 
-    private fun startBackgroundThread() {
-        if (backgroundThread == null) {
-            backgroundThread = HandlerThread("CameraEngineThread").apply { start() }
-            backgroundHandler = Handler(backgroundThread!!.looper)
-        }
-    }
-
-    private fun stopBackgroundThread() {
-        backgroundThread?.quitSafely()
-        try { backgroundThread?.join() } catch (e: Exception) {}
-        backgroundThread = null
-        backgroundHandler = null
-    }
-
     @SuppressLint("MissingPermission")
     private fun openCamera() {
         try {
             for (id in cameraManager.cameraIdList) {
                 val chars = cameraManager.getCameraCharacteristics(id)
-                val facing = chars.get(CameraCharacteristics.LENS_FACING)
-                val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
-
-                if (facing == CameraCharacteristics.LENS_FACING_BACK && caps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) == true) {
+                if (chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK &&
+                    chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) == true) {
+                    
                     activeCameraId = id
                     stackingEngine.activeCameraId = id
-                    
-                    isManualSupported = caps.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR)
+                    isManualSupported = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) == true
                     isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
                     exposureRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
                     sensorRect = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
 
                     val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: continue
-                    
                     val previewSize = map.getOutputSizes(SurfaceTexture::class.java)?.firstOrNull() ?: Size(1920, 1080)
                     binding.textureView.surfaceTexture?.setDefaultBufferSize(previewSize.width, previewSize.height)
 
-                    val rawSize = map.getOutputSizes(ImageFormat.RAW_SENSOR)?.maxByOrNull { it.width * it.height }
-                    if (rawSize != null) {
-                        stackingEngine.setup(rawSize.width, rawSize.height)
-                        imageReader = ImageReader.newInstance(rawSize.width, rawSize.height, ImageFormat.RAW_SENSOR, 3).apply {
-                            setOnImageAvailableListener(stackingEngine.imageListener, backgroundHandler)
-                        }
-                        cameraManager.openCamera(id, stateCallback, backgroundHandler)
-                        return
+                    val rawSize = map.getOutputSizes(ImageFormat.RAW_SENSOR)?.maxByOrNull { it.width * it.height } ?: continue
+                    stackingEngine.setup(rawSize.width, rawSize.height)
+                    imageReader = ImageReader.newInstance(rawSize.width, rawSize.height, ImageFormat.RAW_SENSOR, 3).apply {
+                        setOnImageAvailableListener(stackingEngine.imageListener, backgroundHandler)
                     }
+                    cameraManager.openCamera(id, stateCallback, backgroundHandler)
+                    return
                 }
             }
-            activity.runOnUiThread { Toast.makeText(activity, "RAW Camera not found", Toast.LENGTH_LONG).show() }
-        } catch (e: Exception) { Log.e(TAG, "Open camera error", e) }
+        } catch (e: Exception) { Log.e(TAG, "Open error", e) }
     }
 
     private val stateCallback = object : CameraDevice.StateCallback() {
@@ -133,18 +109,13 @@ class CameraEngine(
 
     private fun createSession() {
         try {
-            val texture = binding.textureView.surfaceTexture ?: return
-            val previewSurface = Surface(texture)
-            val rawSurface = imageReader?.surface ?: return
-
+            val previewSurface = Surface(binding.textureView.surfaceTexture!!)
+            val rawSurface = imageReader!!.surface
             cameraDevice?.createCaptureSession(listOf(previewSurface, rawSurface), object : CameraCaptureSession.StateCallback() {
-                override fun onConfigured(session: CameraCaptureSession) {
-                    captureSession = session
-                    updatePreview()
-                }
-                override fun onConfigureFailed(session: CameraCaptureSession) {}
+                override fun onConfigured(session: CameraCaptureSession) { captureSession = session; updatePreview() }
+                override fun onConfigureFailed(s: CameraCaptureSession) {}
             }, backgroundHandler)
-        } catch (e: Exception) { Log.e(TAG, "createSession error", e) }
+        } catch (e: Exception) { Log.e(TAG, "Session error", e) }
     }
 
     fun updatePreview() {
@@ -152,9 +123,19 @@ class CameraEngine(
         try {
             val builder = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             builder.addTarget(Surface(binding.textureView.surfaceTexture!!))
-            applySettings(builder, isPreview = true)
+            
+            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f)
+            
+            if (isManualSupported && !isAutoPreviewEnabled) {
+                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
+                builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
+            } else {
+                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            }
             captureSession!!.setRepeatingRequest(builder.build(), null, backgroundHandler)
-        } catch (e: Exception) { Log.e(TAG, "updatePreview error", e) }
+        } catch (e: Exception) { Log.e(TAG, "Update preview error", e) }
     }
 
     fun startBurstCapture() {
@@ -162,59 +143,22 @@ class CameraEngine(
         try {
             isCapturing = true
             stackingEngine.startCapture()
-
             val builder = cameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-            builder.addTarget(imageReader!!.surface!!)
-            applySettings(builder, isPreview = false)
+            builder.addTarget(imageReader!!.surface)
+            
+            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, 0.0f)
+            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+            builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
+            builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
 
             val requests = List(stackingEngine.targetStackCount) { builder.build() }
-            
             captureSession!!.captureBurst(requests, object : CameraCaptureSession.CaptureCallback() {
-                override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
-                    stackingEngine.onCaptureResultReceived(result)
-                }
-                
-                override fun onCaptureSequenceCompleted(session: CameraCaptureSession, sequenceId: Int, frameNumber: Long) {
-                    stackingEngine.onSequenceCompleted()
-                    isCapturing = false
-                }
-                
-                override fun onCaptureSequenceAborted(session: CameraCaptureSession, sequenceId: Int) {
-                    stackingEngine.onSequenceCompleted()
-                    isCapturing = false
-                }
+                override fun onCaptureCompleted(s: CameraCaptureSession, r: CaptureRequest, res: TotalCaptureResult) { stackingEngine.onCaptureResultReceived(res) }
+                override fun onCaptureSequenceCompleted(s: CameraCaptureSession, id: Int, f: Long) { isCapturing = false; stackingEngine.onSequenceCompleted() }
+                override fun onCaptureSequenceAborted(s: CameraCaptureSession, id: Int) { isCapturing = false; stackingEngine.onSequenceCompleted() }
             }, backgroundHandler)
-            
-        } catch (e: Exception) { 
-            Log.e(TAG, "Burst error", e)
-            isCapturing = false
-            stackingEngine.resetUI()
-        }
-    }
-
-    private fun applySettings(builder: CaptureRequest.Builder, isPreview: Boolean) {
-        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-        builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocusDistance)
-        builder.set(CaptureRequest.FLASH_MODE, if (isTorchOn) CaptureRequest.FLASH_MODE_TORCH else CaptureRequest.FLASH_MODE_OFF)
-
-        if (isManualSupported) {
-            // FIX: If it's a preview and Auto Preview is ON, let the camera AE run so the preview isn't lagging.
-            if (isPreview && isAutoPreviewEnabled) {
-                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-            } else {
-                // Actual capture, or user disabled Auto Preview: lock manual settings
-                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposure)
-                builder.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
-            }
-        }
-
-        sensorRect?.let {
-            val cx = it.centerX(); val cy = it.centerY()
-            val dx = (0.5f * it.width() / currentZoom).toInt()
-            val dy = (0.5f * it.height() / currentZoom).toInt()
-            builder.set(CaptureRequest.SCALER_CROP_REGION, Rect(cx - dx, cy - dy, cx + dx, cy + dy))
-        }
+        } catch (e: Exception) { isCapturing = false; stackingEngine.resetUI() }
     }
 
     private fun closeCamera() {
@@ -223,19 +167,19 @@ class CameraEngine(
         imageReader?.close(); imageReader = null
     }
 
-    fun setExposureProgress(progress: Int) {
+    fun setExposureProgress(p: Int) {
         exposureRange?.let {
             val min = it.lower.toDouble().coerceAtLeast(1000.0)
             val max = it.upper.toDouble()
-            currentExposure = exp(ln(min) + (progress / 100.0) * (ln(max) - ln(min))).toLong()
+            currentExposure = exp(ln(min) + (p / 100.0) * (ln(max) - ln(min))).toLong()
         }
     }
 
-    fun setIsoProgress(progress: Int) {
+    fun setIsoProgress(p: Int) {
         isoRange?.let {
             val min = it.lower.toDouble()
             val max = it.upper.toDouble()
-            currentIso = exp(ln(min) + (progress / 100.0) * (ln(max) - ln(min))).toInt()
+            currentIso = exp(ln(min) + (p / 100.0) * (ln(max) - ln(min))).toInt()
         }
     }
 }
